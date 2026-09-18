@@ -1,0 +1,722 @@
+# redacted-patch v1
+# questdata-tool: upstream -> local copy; removed lines are stored as SHA-256 only
+file questdata-tool/build.gradle.kts
+@@ -1,36 +1,23 @@
+-9 sha256:6432db3bfcef56f3d96276bb9ece0f6f3584abd156036bd356988035f5ff4075
+ val runeLiteVersion = "1.12.39"
+ 
+ dependencies {
+-1 sha256:ce4cb3e413797cff4d1f2a22ef5ed6eba9bca2c3001d6e9d5b1281a019ebc4c2
+     implementation(project(":questdata-schema"))
+ 
++    // implementation, not compileOnly: the jar loaded at runtime needs these classes
+     implementation("net.runelite:client:$runeLiteVersion")
+     implementation("net.runelite:runelite-api:$runeLiteVersion")
+     implementation("com.google.code.gson:gson:2.8.9")
+ }
+ 
+-2 sha256:7096e532a4026e25182c1d720189b692b40ff8eb4454287e730d864b4e664d0d
+ tasks.withType<JavaCompile>().configureEach {
+     options.release.set(17)
+ }
+ 
+-2 sha256:80f6a74d1fbfab2f495e53b7018addeaa5bee08cebcece84fe57a9788419eda0
++// src/test holds QuestStatesParity, a manual main class run by the parity task, not a test suite
+ tasks.named<Test>("test") {
+     enabled = false
+ }
+ 
+-1 sha256:823ab56b5b5448ba6e1b1dab8a2760f96dae8b0a09684e0481736936a30d248d
+ tasks.register<JavaExec>("export") {
+     group = "questdata"
+     description = "Export Quest Helper data to JSON"
+@@ -38,7 +25,6 @@
+     classpath = sourceSets["main"].runtimeClasspath
+ }
+ 
+-1 sha256:ba82a14825a7a2de1756cd020df91a0e974e88126784710c30c73d680f338d75
+ tasks.register<JavaExec>("parity") {
+     group = "questdata"
+     description = "Check QuestStates.stateOf against QuestHelperQuest.getState"
+file questdata-tool/src/main/java/com/slest/questdata/Main.java
+@@ -12,23 +12,8 @@
+ import java.util.List;
+ import java.util.Locale;
+ 
+-14 sha256:1ccf389c987101982f01f835116889a91fe61268087eb5359baf1208cfb136d9
+ public final class Main
+ {
+-1 sha256:0147dfd9a5aa13555b59a8d2f69739105744f2f872381447a6cf25d5213a4617
+     private static final String PLUGIN_DIR = ".runelite/plugins";
+ 
+     public static void main(String[] args) throws Exception
+@@ -61,9 +46,6 @@
+         }
+         System.out.println("quest-helper: " + jar);
+ 
+-3 sha256:60f8f95a55dc7237d38ba91ff68d33ea97513a5de5a7f34490872c1efa7ac8dc
+         try (URLClassLoader loader = new URLClassLoader(new URL[]{jar.toUri().toURL()},
+                 Main.class.getClassLoader()))
+         {
+@@ -101,7 +83,6 @@
+                     + (result.empty.isEmpty() ? "" : ", NO STEPS: " + result.empty.size()));
+             if (!result.empty.isEmpty())
+             {
+-1 sha256:acf19050d0472dbf6a846e52effd76b6ac3d786d601159682724403a3a6a9973
+                 System.out.println("  exported but unwalkable: " + String.join(", ", result.empty));
+             }
+             if (parsed.verbose)
+@@ -156,7 +137,6 @@
+         throw new IllegalArgumentException("no quest named '" + key + "'");
+     }
+ 
+-1 sha256:3310b8a0d2d2c8770e2222580f6197c55de95ed7d5a6f9722e2ca8f237b5d330
+     private static Path findQuestHelperJar() throws IOException
+     {
+         Path dir = Paths.get(System.getProperty("user.home"), PLUGIN_DIR);
+@@ -172,7 +152,6 @@
+                 found.add(entry);
+             }
+         }
+-1 sha256:8f1804592b942aeb040cf6c73863b063726617cab1e50ea41deb7fd31903e3f9
+         return found.stream().max(Comparator.comparingLong(p -> p.toFile().lastModified())).orElse(null);
+     }
+ 
+@@ -182,12 +161,12 @@
+         to.println();
+         to.println("  --jar <path>     quest-helper jar to export from");
+         to.println("                   (default: newest ~/" + PLUGIN_DIR + "/quest-helper*.jar)");
+-1 sha256:a4cf4ee0c2ca6458845fe9567105769da2e77e5171db48b9b42ef22049c0fb6d
++        to.println("  --out <dir>      output directory (required)");
+         to.println("  --quest <KEY>    export one quest, e.g. DORICS_QUEST");
+         to.println("  --verbose        list the quests that need a live client");
+         to.println("  --strict         exit 1 if any quest could not be exported");
+         to.println("  --stub-client    also export quests that read the account, against a");
+-1 sha256:3bde4eeee2445bad32fdf6596e0d3a4f4944a5619d8d9053a9448da8ba974a79
++        to.println("                   logged-out stand-in (see osrs-data's README.md)");
+         to.println("  --skill-level N  profile the stand-in reports (default 1; try 99)");
+         to.println("  --account-type T NORMAL | IRONMAN | ULTIMATE_IRONMAN (default NORMAL)");
+         to.println("  --help");
+@@ -196,7 +175,7 @@
+     private static final class Args
+     {
+         Path jar;
+-1 sha256:266ba50148ab9436b341dd501de9f9e0da73ca51f0ea22176296da30d39458a9
++        Path out;
+         String quest;
+         boolean verbose;
+         boolean strict;
+@@ -247,6 +226,10 @@
+                         throw new IllegalArgumentException("unknown option: " + arg);
+                 }
+             }
++            if (!args.help && args.out == null)
++            {
++                throw new IllegalArgumentException("--out <dir> is required");
++            }
+             return args;
+         }
+ 
+file questdata-tool/src/main/java/com/slest/questdata/QhMirror.java
+@@ -5,7 +5,6 @@
+ import java.lang.reflect.Field;
+ import java.lang.reflect.InvocationTargetException;
+ import java.lang.reflect.Method;
+-1 sha256:0f1f62e310fa4dd79555b8cc7845ddff65736fe87ca42f9ecc812e806b62cc74
+ import java.lang.reflect.Proxy;
+ import java.util.ArrayList;
+ import java.util.Collection;
+@@ -15,152 +14,40 @@
+ import java.util.Map;
+ import java.util.concurrent.ConcurrentHashMap;
+ 
+-18 sha256:6119cdf041924d1c11ac7742170bd04d8efe90cc25a0dbf7f9492e3cf57a5d8d
+ public final class QhMirror
+ {
+-1 sha256:3e1d80c553a9d69323d2351ce9e345df01348770dd21d59434663b3e397d65e5
+     private static final String ANCHOR = "QuestHelperPlugin";
+-6 sha256:dbb27626ccbc59f46b9be2888782ba08b263151a10c67bc9b86bdf1dafaad938
++    private static final String ROOT = "com.questhelper.";
+ 
+     private final ClassLoader loader;
+     private final String root;
+-1 sha256:c6961a795ed719bf03b18217ed77296418c0f7220da1cb2de79bc21013930130
+ 
+     private final Map<String, Class<?>> classes = new ConcurrentHashMap<>();
+     private final Map<String, Method> methods = new ConcurrentHashMap<>();
+     private final Map<String, Field> fields = new ConcurrentHashMap<>();
+-1 sha256:9caafbf9a5a6badafe18e83e2bdcd122cab3d349aef66dbe18578b6c78703e5f
+     private final Map<String, Boolean> absent = new ConcurrentHashMap<>();
+ 
+-1 sha256:07289b0cec3f78ddfa2c62e548a39e9491a52d6fdbe5a8552d3464035a7ee2c4
++    private QhMirror(ClassLoader loader, String root)
+     {
+         this.loader = loader;
+         this.root = root;
+-1 sha256:e10d3a26c60968874112a45977facae500c32a14372b5368c0d3cfc92d2168d8
+     }
+ 
+-81 sha256:71dc39ad5fe75b3fadf9a79b681cefd0c6078b66fd7a0fb0ae5d51ebbcf789b8
+     public static QhMirror using(ClassLoader loader)
+     {
+         if (loader == null)
+         {
+             return null;
+         }
+-1 sha256:f4954bf9279e6f78d09f25fe371a4149586f3579107865670c6660c076bae469
++        try
+         {
+-9 sha256:ac5a60828a05c73fb6e41077b35de0e7364ccaff4b634dbfb0e62315731624f2
++            Class<?> type = Class.forName(ROOT + ANCHOR, false, loader);
++            return new QhMirror(type.getClassLoader(), ROOT);
+         }
+-1 sha256:685c3cb118bab02298b90c57e51b467e70d3e8beef354f8782f5d7d4c94f0b58
++        catch (Throwable ignored)
++        {
++            return null;
++        }
+     }
+ 
+     public boolean isAvailable()
+@@ -168,24 +55,11 @@
+         return cls("questinfo.QuestHelperQuest") != null;
+     }
+ 
+-1 sha256:4780dc52baee124d61f17bdf2f8a276d1eb9c1cae7f65d7e3a308081221943ac
+     public String getRoot()
+     {
+         return root;
+     }
+ 
+-12 sha256:a33454b09ba393b4cc1863ca204ab771c23e3ed24e27462c37a23d972a61ae9e
+     public Class<?> cls(String relative)
+     {
+         Class<?> cached = classes.get(relative);
+@@ -210,15 +84,6 @@
+         }
+     }
+ 
+-9 sha256:fdc7ce5e3901e048696b670bc7958469e0bbaff06e6d80e5cd7b3039995f1061
+     public boolean isA(Object value, String simpleName)
+     {
+         if (value == null || simpleName == null)
+@@ -247,21 +112,11 @@
+         return false;
+     }
+ 
+-1 sha256:01929996fd9b2aa27ec473b8f7b41c4509f802c7a19d8eff1f8ca9695ae9faa2
+     public String typeOf(Object value)
+     {
+         return value == null ? null : value.getClass().getSimpleName();
+     }
+ 
+-9 sha256:43064b15545a54f310123ffc41d0d4b979dddccf70495331efb1a4be6dc221bd
+     public <T> T read(Object target, String name, Class<T> type)
+     {
+         if (target == null)
+@@ -280,30 +135,6 @@
+             {
+                 return null;
+             }
+-24 sha256:146aa52600aa22eef895ec162a9e389537aa3a863c12045fdeda5e471d516208
+             return type.isInstance(value) ? type.cast(value) : null;
+         }
+         catch (Throwable t)
+@@ -335,7 +166,6 @@
+             }
+             catch (NoSuchFieldException ignored)
+             {
+-1 sha256:a052ef6132fe92bb7f677fb2a4526282009013d29a6fe8bf4558e231d59ec61e
+             }
+             catch (Throwable t)
+             {
+@@ -346,11 +176,6 @@
+         return null;
+     }
+ 
+-5 sha256:c1a26e3d547040cf7161dbbe3e9ec2c07dad6fbc82ecc15cd047409394ce81dd
+     public boolean write(Object target, String name, Object value)
+     {
+         if (target == null)
+@@ -373,20 +198,6 @@
+         }
+     }
+ 
+-14 sha256:9cf0c39dae5bed3f6e9f3e299b06052e421eda4c043eb5fdcfdff29a2d9e720b
+     public Object allocate(String className)
+     {
+         try
+@@ -404,40 +215,6 @@
+         }
+     }
+ 
+-34 sha256:a1870e264e50d4bfb1f04ab09e0851f76c1b66642502a9c4a8a8592ba3a9926b
+     public Object stubClient(int skillLevel)
+     {
+         try
+@@ -460,24 +237,6 @@
+         }
+     }
+ 
+-18 sha256:01a45ae3f73e1dc6c5ef47e17e0d9312bfa55180d36b62867b6c362a03dcf35a
+     public Object stubQuestHelperPlugin(Object client, String accountType)
+     {
+         Object plugin = allocate(root + ANCHOR);
+@@ -491,8 +250,6 @@
+         {
+             write(states, "accountType", normal);
+         }
+-2 sha256:203b0acc3b288253a4d655626d061a9c23ba6b81fe6457cbbba58a47f190a5e8
+         if (client != null)
+         {
+             write(states, "client", client);
+@@ -500,7 +257,6 @@
+         return write(plugin, "playerStateManager", states) ? plugin : null;
+     }
+ 
+-1 sha256:29fbbcac51a331dfe79df6b158481a900e36caa171ea626a1bfc79bd65f11915
+     public Object enumConstant(String relativeClass, String name)
+     {
+         for (Object constant : enumValues(relativeClass))
+@@ -513,21 +269,11 @@
+         return null;
+     }
+ 
+-1 sha256:ae1cf3356e8f3465274dbd8e539865c03111909ac382842bf0c6837b40eb0561
+     public Object stubConfigManager()
+     {
+         return allocate("net.runelite.client.config.ConfigManager");
+     }
+ 
+-9 sha256:6a30d38e8d6f4802ad6efb4a9a7e0455212fef63fc74dec2c04a401444919631
+     public Object call(Object target, String name)
+     {
+         if (target == null)
+@@ -553,13 +299,6 @@
+         }
+     }
+ 
+-7 sha256:6f6e1b2e790aaa67048d5f26fe55d9bbf3f9e9ed93d120915a4e3326f11aec71
+     public Object callOrThrow(Object target, String name) throws Throwable
+     {
+         if (target == null)
+@@ -581,11 +320,6 @@
+         }
+     }
+ 
+-5 sha256:4afb03be3fea9ceba16fafe963cae192faa91c5e00f603cdbc2566fd2bd0ee06
+     private Method method(Class<?> type, String name, int arity)
+     {
+         String key = type.getName() + "#" + name + "/" + arity;
+@@ -600,10 +334,7 @@
+         }
+         for (Class<?> c = type; c != null; c = c.getSuperclass())
+         {
+-4 sha256:c4e235cd30eee6c1c02b4e5c82dc561afb29312ab5c3f8f45f7656a4951c86e3
++            // getDeclaredMethods() order is unspecified and bridges share name and arity: pick stably
+             Method best = null;
+             for (Method m : c.getDeclaredMethods())
+             {
+@@ -624,7 +355,6 @@
+                 }
+                 catch (Throwable ignored)
+                 {
+-1 sha256:3496802635cba4cd5ff9a8d9daaa7878793b55670044ac817f35423fa3741c3f
+                 }
+                 methods.put(key, best);
+                 return best;
+@@ -634,14 +364,6 @@
+         return null;
+     }
+ 
+-8 sha256:74642a7298d321152ca596152cdce82a620396a252c6534a9984beeef1e94825
+     private static boolean preferred(Method candidate, Method incumbent)
+     {
+         boolean candidateSynthetic = candidate.isBridge() || candidate.isSynthetic();
+@@ -652,8 +374,6 @@
+         }
+         return candidate.getReturnType().getName().compareTo(incumbent.getReturnType().getName()) < 0;
+     }
+-2 sha256:809a6d38ede079e5388c1a64df863c11d0486fa5c5d482f50eac0c2463104058
+ 
+     public Integer callInt(Object target, String name)
+     {
+@@ -685,13 +405,7 @@
+         return value == null ? null : String.valueOf(value);
+     }
+ 
+-7 sha256:07f89f296b379e602aff40eb56d658ccf3a19dd611ec7b9a52dea97479d3114c
++    /** Keeps null elements: a null substep is positional in the exported step list. */
+     @SuppressWarnings("unchecked")
+     public <T> List<T> callList(Object target, String name)
+     {
+@@ -708,7 +422,6 @@
+         return out;
+     }
+ 
+-1 sha256:b769600b9cd38dc57cad8f743dbfc06697c75480a8393b1559649ec110186db7
+     public <T> List<T> callListNonNull(Object target, String name)
+     {
+         List<T> all = callList(target, name);
+@@ -723,7 +436,6 @@
+         return out;
+     }
+ 
+-1 sha256:38625bf179239af0c8d9414337cf58dab2a7eff3a9a7580c8318505129f5bd99
+     @SuppressWarnings("unchecked")
+     public <K, V> Map<K, V> callMap(Object target, String name)
+     {
+@@ -735,7 +447,6 @@
+         return new LinkedHashMap<>((Map<K, V>) value);
+     }
+ 
+-1 sha256:6b328eda379796593e7c74d0b7e99dec93f99e0929993bf5d2c04bb6036051da
+     @SuppressWarnings("unchecked")
+     public <T> List<T> readList(Object target, String name)
+     {
+@@ -743,11 +454,6 @@
+         return value == null ? Collections.emptyList() : value;
+     }
+ 
+-5 sha256:ead3c5488e09da83f9d5063d93e23c322e7925912a62f6fd39c561b423c77be6
+     public Object[] enumValues(String relativeClass)
+     {
+         Class<?> type = cls(relativeClass);
+@@ -759,31 +465,11 @@
+         return constants == null ? new Object[0] : constants;
+     }
+ 
+-16 sha256:11077bb008d7261c75b33e76ce04556a921d0c294a3bf62a52a9c3611822162a
+     public Object defaultConfig()
+     {
+         return defaultsProxy("QuestHelperConfig");
+     }
+ 
+-4 sha256:1e0b26c3a61236b7951c366d3d8582a07196ed3b892b98a3baf4a1d3aacd27dc
+     public Object defaultsProxy(String relativeClass)
+     {
+         Class<?> iface = cls(relativeClass);
+@@ -825,17 +511,13 @@
+         if (type == byte.class) return (byte) 0;
+         if (type == char.class) return (char) 0;
+         if (type == String.class) return "";
+-3 sha256:c5766e9e42d9e0effca6ca19f07732de989d348e4099aeaf231e9430bbe54bc3
++        // a real array, not null: callers index straight into it (e.g. getIntStack())
+         if (type.isArray()) return java.lang.reflect.Array.newInstance(type.getComponentType(), STACK_SIZE);
+         return null;
+     }
+ 
+-1 sha256:500c7a5750d16da77a49e4de484da78ab7afa6046512c7507ef11db34ac3f32c
+     private static final int STACK_SIZE = 1000;
+ 
+-1 sha256:380bbaf75820a0b19de5535e8e5195f51b1f3f90503c1b529a631f3ae206fa3a
+     public static String nameOf(Object value)
+     {
+         if (value == null)
+file questdata-tool/src/main/java/com/slest/questdata/QuestDataExporter.java
+@@ -21,61 +21,25 @@
+ import java.util.TreeMap;
+ import java.util.stream.Collectors;
+ 
+-15 sha256:a26f9db2236d27cd507448bc81f6832313228f1b167f3619de1f009252c7f6b4
+ public class QuestDataExporter
+ {
+     private static final int SCHEMA_VERSION = 3;
+ 
+-9 sha256:d0122b50a0a6ccdeb102fcbd18382d72336d8478b17cb9d1d1215dcacafff378
+     private static final List<String> EXPORTED_TYPES =
+             List.of("P2P", "F2P", "ACHIEVEMENT_DIARY", "MINIQUEST");
+ 
+     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+     private final QhMirror mirror;
+     private final Object questHelperConfig;
+-1 sha256:6b21efb1f67d2eb06cdae23675a5e2d88da434dc13ef09f8f911ae043ec472e6
+     private final Object configManager;
+-1 sha256:8af146404a4d2622981ea40c4c3df4db9e5dca8b6626db7fc5c7b0c56dc0bd79
+     private Object client;
+-1 sha256:6719d58681dd4bf4424a44c129b94bf38a43522bb097b49929a14be76fc39807
+     private Object questHelperPlugin;
+ 
+-4 sha256:f120ca01a7d58245d17473e8d3b8efc4cc4ea9263d869268f75ed77c0de7a990
+     public QuestDataExporter(QhMirror mirror)
+     {
+         this(mirror, mirror == null ? null : mirror.defaultConfig());
+     }
+ 
+-5 sha256:dc1bae79177a6f9bd1c273441fd2defd191aec296aa63cb4d77063823e4adf7f
+     public QuestDataExporter(QhMirror mirror, Object questHelperConfig)
+     {
+         this.mirror = Objects.requireNonNull(mirror, "mirror");
+@@ -83,22 +47,11 @@
+         this.configManager = mirror.stubConfigManager();
+     }
+ 
+-4 sha256:e3f6e1fbed228f2ebe61a9a47d4b98f862feb0a158a25b7a0be0ef67fce103d4
+     public QuestDataExporter withStubClient()
+     {
+         return withStubClient(1, "NORMAL");
+     }
+ 
+-7 sha256:130fa7dd7484b473a87fc86270727f5c09c1f9753dc18e5ca5dccf87a207f107
+     public QuestDataExporter withStubClient(int skillLevel, String accountType)
+     {
+         this.client = mirror.stubClient(skillLevel);
+@@ -110,20 +63,9 @@
+     {
+         public final List<QuestData> quests = new ArrayList<>();
+         public final List<String> errors = new ArrayList<>();
+-8 sha256:1545cb62a6b959ee51c5a6da994596f760a5e2d1449aa78e8fe1187945d1183a
+         public final List<String> empty = new ArrayList<>();
+     }
+ 
+-3 sha256:7cd7cc838c39c296dd8dd2fb31ccc40553dcacade9900a24935b11c1d0650c74
+     public QuestData exportQuest(Object quest)
+     {
+         QuestData data = new QuestData();
+@@ -151,9 +93,6 @@
+         }
+ 
+         ensureHelperContext(quest, helper);
+-3 sha256:c3845625026cd7ad8d0aed3302f33ed883cd464d1d9688038b1f5b788dd5c0f4
+         try
+         {
+             mirror.callOrThrow(helper, "initializeRequirements");
+@@ -163,12 +102,7 @@
+             throw new IllegalStateException("initializeRequirements: " + describe(t), t);
+         }
+ 
+-6 sha256:31d297f1de6651d92597eeaa47811f82eb7f2673ecc4f95e5685afee7d0daee7
++        // steps before requirements: some helpers assign their requirement fields in setupSteps()
+         Map<Integer, Object> stepMap = loadSteps(helper);
+         IdentityHashMap<Object, String> stepIds = new IdentityHashMap<>();
+         List<QuestData.QuestStepData> stepData = new ArrayList<>();
+@@ -244,14 +178,6 @@
+         return data;
+     }
+ 
+-8 sha256:d4b359a47ed11d99165b62d38c17acebe9de359803e042636b096c0662477797
+     private void populateProgressVariable(QuestData data, Object quest)
+     {
+         if (data == null || quest == null)
+@@ -259,8 +185,6 @@
+             return;
+         }
+ 
+-2 sha256:b1ebeea7728fe212ea4ca9d13a002efad710fbba426707876901c0893f6d0b3f
+         Integer completeValue = mirror.read(quest, "completeValue", Integer.class);
+         boolean hasQuestId = data.questId != null && data.questId != -1;
+         if (!hasQuestId && completeValue != null && completeValue != -1)
+@@ -273,9 +197,7 @@
+             data.stateSkill = QhMirror.nameOf(skill);
+         }
+ 
+-3 sha256:999e6f0e022ff9ea402dd8eddccdf753ab7213bc9aaf10042f6b8f7b57e38522
++        // getter first, then the field: the plugin-hub build has only the field
+         Object varbit = mirror.call(quest, "getVarbit");
+         if (varbit == null)
+         {
+@@ -300,11 +222,6 @@
+         }
+     }
+ 
+-5 sha256:e7b79ed3e39b979f8dcabf3dff9925e3d82a09211f4d4908dfdefcd51ab10aed
+     private void ensureHelperContext(Object quest, Object helper)
+     {
+         if (mirror.call(helper, "getQuest") == null)
+@@ -315,10 +232,6 @@
+         {
+             invokeOneArg(helper, "setConfig", questHelperConfig);
+         }
+-4 sha256:4a3b03d8881d3196092bdf68ddae0798aa8e533c67394d2aa6bad4ed89721b4b
+         if (configManager != null && mirror.read(helper, "configManager", Object.class) == null)
+         {
+             mirror.write(helper, "configManager", configManager);
+@@ -331,9 +244,6 @@
+         {
+             mirror.write(helper, "questHelperPlugin", questHelperPlugin);
+         }
+-3 sha256:f657a10030fd2b56aeffa9e989098938424895fbedd85ca66d1cbedaae53414e
+         for (Object sub : mirror.callList(helper, "getQuestHelpers"))
+         {
+             if (questHelperConfig != null && mirror.call(sub, "getConfig") == null)
+@@ -383,9 +293,6 @@
+         }
+     }
+ 
+-3 sha256:8ffea9275c42a4277246fa9f377bcb5affc0bf1a565fe15e1818e9818e5130cc
+     public List<Object> quests()
+     {
+         List<Object> out = new ArrayList<>();
+@@ -400,19 +307,6 @@
+         return out;
+     }
+ 
+-13 sha256:e8d6774455e819180eb5c6f0f784e1f07d7fe94e9422ee80cf851b1b6e8c4a95
+     public ExportResult exportAllSafe()
+     {
+         ExportResult result = new ExportResult();
+@@ -441,11 +335,6 @@
+         return result;
+     }
+ 
+-5 sha256:e87531167ff23d020ce3b219d8ba6a35ef83d30fa1bdd2c6854a46aa79092c5d
+     public void writeQuest(Path outputDir, QuestData data) throws IOException
+     {
+         Files.createDirectories(outputDir);
+@@ -465,8 +354,6 @@
+         }
+         return result;
+     }
+-2 sha256:568a667f24368f4cf8f8e927e0123e64210c1c388c6099011761b671fbe9db34
+ 
+     private List<QuestData.RequirementData> exportRequirements(List<?> requirements)
+     {
+@@ -492,15 +379,6 @@
+         return exported;
+     }
+ 
+-9 sha256:bbe093f9d111d3f4b0ef84f230bd7190e3d4d8e1a566069206ee5553c6aaf130
+     private QuestData.RequirementData exportRequirement(Object requirement,
+                                                         IdentityHashMap<Object, QuestData.RequirementData> seen)
+     {
+@@ -678,8 +556,6 @@
+         return data;
+     }
+ 
+-2 sha256:a5d134bcb79836fc2062a90acc11dbbfddac6d74a9da90f0172abd0ad1862f6c
+     private List<QuestData.ExperienceReward> exportExperienceRewards(List<?> rewards)
+     {
+         List<QuestData.ExperienceReward> exported = new ArrayList<>();
+@@ -721,8 +597,6 @@
+         return exported;
+     }
+ 
+-2 sha256:a56e2408c6c711da9a37385f5a39f1f6fd67290c84993c23c810417b2cc6d933
+     private void collectStep(Object step, IdentityHashMap<Object, String> stepIds,
+                              List<QuestData.QuestStepData> output,
+                              IdentityHashMap<Object, QuestData.QuestStepData> visited)
+@@ -734,7 +608,7 @@
+ 
+         QuestData.QuestStepData data = new QuestData.QuestStepData();
+         data.id = getStepId(stepIds, step);
+-1 sha256:c404ca12acd1f1d83930856f95b4b6efdc14efa4f1e6f46d8107c56e7cbb5771
++        // before the substep walk, or a step that reaches itself recurses forever
+         visited.put(step, data);
+         data.type = mirror.typeOf(step);
+         for (Object line : mirror.callList(step, "getText"))
+@@ -795,11 +669,6 @@
+         output.add(data);
+     }
+ 
+-5 sha256:011eee41f190f6c8ff7907db7d10ed9aff650ca9e5172af128d07ed003611e83
+     private QuestData.StepTargetData extractTargets(Object step)
+     {
+         QuestData.StepTargetData targets = new QuestData.StepTargetData();
+@@ -844,10 +713,6 @@
+ 
+         if (mirror.isA(step, "WidgetStep"))
+         {
+-4 sha256:b4f93a76ba4b1cef212b143a5651ac297a126a395e536dbcfe92f3f94b05619e
+             List<?> widgetDetails = mirror.callList(step, "getWidgetDetails");
+             if (widgetDetails.isEmpty())
+             {
+@@ -917,8 +782,6 @@
+         return output;
+     }
+ 
+-2 sha256:5b6f37c72052cef1de8c6cc81dbdaffc8fe8e1f3ca68a9e5e3c9a14b9e2bc4a1
+     private List<QuestData.QuestPanelData> exportPanels(List<?> panels, IdentityHashMap<Object, String> stepIds)
+     {
+         List<QuestData.QuestPanelData> exported = new ArrayList<>();
+@@ -963,9 +826,6 @@
+         return data;
+     }
+ 
+-3 sha256:e482fe70c514d9c79c3e2c3fa430938b45257820ca7cfe8e4861f4a0b5d60fd9
+     private QuestData.WorldPointData exportWorldPoint(Object point)
+     {
+         if (point == null)
+@@ -1025,13 +885,6 @@
+         return out;
+     }
+ 
+-7 sha256:c648ed84120c081b891a59eb9a5619e55c0006bc70256037ee2aa8a868b5475d
+     private String getStepId(IdentityHashMap<Object, String> stepIds, Object step)
+     {
+         if (step == null)
+@@ -1041,7 +894,6 @@
+         return stepIds.computeIfAbsent(step, key -> "step-" + (stepIds.size() + 1));
+     }
+ 
+-1 sha256:9af5549f0a0e0c2cae8f95f96500a660fdb75bb62d798b1abb703a7873c9e55d
+     private static String describe(Throwable t)
+     {
+         String message = t.getMessage();
+@@ -1057,23 +909,11 @@
+         }
+         catch (Throwable ex)
+         {
+-1 sha256:4f65de6f1de025325558f7d9d7f8fb73ec05587b538bd67e228a2375acced073
+             return mirror.typeOf(requirement);
+         }
+     }
+ 
+-12 sha256:966b18153017a9aff0776d96a4eba5b210d08e158d3f6bad333365b4d13f6c63
++    /** Map.of iteration order varies per JVM run; sorting keeps re-exports byte-stable. */
+     @SuppressWarnings("unchecked")
+     private Map<Integer, String> sortedByKey(Map<?, ?> source)
+     {
+@@ -1110,7 +950,6 @@
+         return out;
+     }
+ 
+-1 sha256:0f0e555f2fa6887ed83e27ea25c8b243786d3299a860d71260ba956a259e2444
+     private List<Object> toList(Object value)
+     {
+         List<Object> out = new ArrayList<>();
+@@ -1137,18 +976,11 @@
+         return out;
+     }
+ 
+-6 sha256:b285f1b81eff22f985a86f12a47b8b916738727ceae0966e6da9235ec7bf42d5
+     @SuppressWarnings("unchecked")
+     private Map<Integer, Object> loadSteps(Object helper)
+     {
+         if (mirror.isA(helper, "BasicQuestHelper"))
+         {
+-1 sha256:28d4e6e2ab3fd7cd7b518e8eaf70e054dcb55148fc20459bbd2773aea6ba37a1
+             Object result;
+             try
+             {
+@@ -1162,8 +994,6 @@
+         }
+         if (mirror.isA(helper, "ComplexStateQuestHelper"))
+         {
+-2 sha256:683d4ce59c8ea0e94b363208ab9971edeb18fb13f32a19930cf753fd2c092bb5
+             Object step;
+             try
+             {
+file questdata-tool/src/test/java/com/slest/questdata/QuestStatesParity.java
+@@ -13,24 +13,11 @@
+ import java.util.List;
+ import java.util.stream.Stream;
+ 
+-12 sha256:f66764d43616c2268bbf82a9f7c37b2cdd8fb38d9f0f9f75b84ab666943e8cc1
+ public final class QuestStatesParity
+ {
+     private static final int[] SCRIPT_RESULTS = {0, 1, 2, 3};
+     private static final int[] SKILL_LEVELS = {1, 50, 99};
+ 
+-1 sha256:4327b6ad15bc90dd4a25349be049d4514095c9a2378826b4d0723be45abc688b
+     private static int scriptResult;
+     private static int varValue;
+     private static int skillLevel;
+@@ -96,10 +83,7 @@
+         }
+     }
+ 
+-4 sha256:a36c3f9eace15c46259d8b2cd0ff2e3013289b6c6027cfb1f66b19f370d99125
++    // runScript is a no-op: Quest Helper reads the script result straight off getIntStack()
+     private static Object fakeClient() throws ClassNotFoundException
+     {
+         Class<?> type = Class.forName("net.runelite.api.Client");
