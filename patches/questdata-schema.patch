@@ -1,0 +1,32 @@
+# redacted-patch v1
+# questdata-schema: upstream -> local copy; removed lines are stored as SHA-256 only
+file questdata-schema/src/main/java/com/slest/questdata/QuestData.java
+@@ -13,25 +13,10 @@
+     public String type;
+     public String difficulty;
+ 
+-7 sha256:b054c87a406fce0fcb91808eef99dc75257d5e1d237b468d3d9e368ea1d7a9a0
+     public Integer progressVarbitId;
+     public Integer progressVarpId;
+ 
+-7 sha256:d8d46376f2775781904a73b4757c8e0542d6057e35eb550bc2b52b863c5950c9
+     public Integer completeValue;
+-1 sha256:c1bb39c72a531dc7a88dd9b50ad0023b9faea4f795fc178e3cb914a2bffe44d3
+     public String stateSkill;
+ 
+     public QuestRewards rewards = new QuestRewards();
+file questdata-schema/src/main/java/com/slest/questdata/QuestStates.java
+@@ -2,32 +2,10 @@
+ 
+ import net.runelite.api.QuestState;
+ 
+-17 sha256:cd5e49d42d27704b5d4db99531dbe2010269f905f8a30d2ec0a1eb51151d2a3c
+ public final class QuestStates
+ {
+-1 sha256:c6bb97e023eec459ec1524716e4b951375873721610450f6b175c3e2ea6757e2
+     public interface GameReads
+     {
+-4 sha256:715421d7da33c412d4a0a5f439ee7592160395038307d5b86b8e9926469613d8
+         int questScriptState(int questId);
+ 
+         int varbit(int id);
