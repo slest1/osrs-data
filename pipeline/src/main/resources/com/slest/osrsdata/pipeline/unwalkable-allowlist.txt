@@ -1,0 +1,7 @@
+# Quest keys allowed into a bundle with no steps or no panels.
+#
+# An entry without steps is valid JSON that nobody can walk, and one without panels has no
+# sections to show, so the bundler refuses both unless the quest is listed here. Derived from the
+# real export (Quest Helper 4.17.1, RuneLite 1.12.39, NORMAL and IRONMAN, skill level 1): every
+# one of the 261 entries has steps and panels, so the list is empty. Add a key only after checking
+# that the quest really is empty upstream, one per line.
