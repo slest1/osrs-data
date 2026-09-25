@@ -1,0 +1,96 @@
+name: Refresh quest bundles
+
+on:
+  schedule:
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build and publish even if the hub still serves the jar behind the latest release
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-quests
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      FORCE: ${{ inputs.force }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Fetch the plugin hub's Quest Helper jar
+        run: ./gradlew --quiet :pipeline:fetch --args="--out '$PWD/out/fetch'"
+
+      - name: Compare with the latest release
+        id: compare
+        run: |
+          current=$(jq -r .jarHash out/fetch/quest-helper.json)
+          version=$(jq -r .questHelperVersion out/fetch/quest-helper.json)
+          previous=""
+          mkdir -p out/previous
+          if gh release download --pattern manifest.json --dir out/previous --clobber; then
+            previous=$(jq -r .source.questHelperJarHash out/previous/manifest.json)
+          else
+            echo "No previous release to compare with."
+            rm -f out/previous/manifest.json
+          fi
+          echo "hub serves Quest Helper $version, jarHash $current; latest release has ${previous:-nothing}"
+          echo "tag=quests-${version}-${current:0:8}" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$current" != "$previous" || "$FORCE" == "true" ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Unchanged; nothing to publish."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Export and bundle
+        if: steps.compare.outputs.build == 'true'
+        run: |
+          args=(--skip-fetch)
+          if [[ -f out/previous/manifest.json ]]; then
+            args+=(--previous-manifest out/previous/manifest.json)
+          fi
+          scripts/refresh.sh "${args[@]}"
+
+      - name: Publish the release
+        if: steps.compare.outputs.build == 'true'
+        env:
+          TAG: ${{ steps.compare.outputs.tag }}
+          VERSION: ${{ steps.compare.outputs.version }}
+        run: |
+          files=(out/bundle/quests-normal.json.gz out/bundle/quests-ironman.json.gz out/bundle/manifest.json)
+          {
+            echo "Quest Helper $VERSION from RuneLite's plugin hub, bundle format v1."
+            echo
+            jq -r '.source | to_entries[] | "- \(.key): `\(.value)`"' out/bundle/manifest.json
+            echo
+            echo "| file | entries | bytes | sha256 | uncompressed bytes | uncompressed sha256 |"
+            echo "|---|---|---|---|---|---|"
+            jq -r '.files[] | "| \(.name) | \(.entries) | \(.bytes) | `\(.sha256)` | \(.uncompressedBytes) | `\(.uncompressedSha256)` |"' out/bundle/manifest.json
+            echo
+            echo "Quest data from Quest Helper by Zoinkwiz and contributors, BSD 2-Clause License."
+          } > out/release-notes.md
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            # forced re-run for an already-published jar: replace its assets
+            gh release upload "$TAG" "${files[@]}" --clobber
+            gh release edit "$TAG" --notes-file out/release-notes.md --latest
+          else
+            gh release create "$TAG" "${files[@]}" --title "Quest Helper $VERSION ($TAG)" \
+              --notes-file out/release-notes.md --latest
+          fi
